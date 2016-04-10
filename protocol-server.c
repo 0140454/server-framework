@@ -85,7 +85,7 @@ struct Server {
      * timeout.
      */
     unsigned char *tout;
- 
+
     /**
      * map all connection's idle cycle count values. use idle[fd] to
      * get/set the count.
@@ -534,6 +534,9 @@ static void async_on_data(server_pt *p_server)
         protocol->on_data((*p_server), sockfd);
         // release the handle
         (*p_server)->busy[sockfd] = 0;
+        if ((*p_server)->protocol_map[sockfd]->service != timer_protocol_name) {
+            reactor_close(_reactor_(*p_server), sockfd);
+        }
         return;
     }
     /* we didn't get the handle, reschedule - but only if the connection
