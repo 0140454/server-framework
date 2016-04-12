@@ -14,10 +14,16 @@ CFLAGS = -std=gnu99 -Wall -O2 -g -I .
 LDFLAGS = -lpthread
 
 OBJS := \
-	async.o \
 	reactor.o \
 	buffer.o \
 	protocol-server.o
+
+ifeq ($(strip $(LOCK_FREE)),1)
+OBJS += async-lockfree.o
+else
+OBJS += async.o
+endif
+
 deps := $(OBJS:%.o=%.o.d)
 OBJS := $(addprefix $(OUT)/,$(OBJS))
 deps := $(addprefix $(OUT)/,$(deps))
