@@ -89,7 +89,7 @@ struct Async {
 static struct Thread *round_robin_schedule(async_p async) {
     static int cur_thread_index = -1;
 
-	cur_thread_index = (cur_thread_index + 1) % async->count;
+	cur_thread_index = __sync_add_and_fetch(&cur_thread_index, 1) % async->count;
 	return &async->threads[cur_thread_index];
 }
 
@@ -222,26 +222,28 @@ static void async_destroy(async_p async)
 static async_p async_create(int threads)
 {
     async_p async = malloc(sizeof(*async) + (threads * sizeof(struct Thread)));
+    struct Thread *thread = NULL;
 
     async->run = 1;
     /* create threads */
-    for (async->count = 0; async->count < threads; async->count++) {
+    for (async->count = 1; async->count <= threads; async->count++) {
+        thread = nth_thread(async, async->count - 1);
         /* initialize pipe */
-        nth_thread(async, async->count)->pipe.in = 0;
-        nth_thread(async, async->count)->pipe.out = 0;
-        if (pipe((int *) &(nth_thread(async, async->count)->pipe))) {
+        thread->pipe.in = 0;
+        thread->pipe.out = 0;
+        if (pipe((int *) &(thread->pipe))) {
             free(async);
             return NULL;
         };
-        fcntl(nth_thread(async, async->count)->pipe.out, F_SETFL, O_NONBLOCK | O_WRONLY);
+        fcntl(thread->pipe.out, F_SETFL, O_NONBLOCK | O_WRONLY);
 
         /* initialize work queue */
-        nth_thread(async, async->count)->front = 0;
-        nth_thread(async, async->count)->rear = 0;
-        memset(nth_thread(async, async->count)->work_queue, 0, WORK_QUEUE_SIZE * sizeof(struct AsyncTask));
+        thread->front = 0;
+        thread->rear = 0;
+        memset(thread->work_queue, 0, WORK_QUEUE_SIZE * sizeof(struct AsyncTask));
 
         /* create thread */
-        if (create_thread(&(nth_thread(async, async->count)->handle),
+        if (create_thread(&(thread->handle),
                           worker_thread_cycle, async)) {
             /* signal */
             async_signal(async);
@@ -251,6 +253,8 @@ static async_p async_create(int threads)
             return NULL;
         };
     }
+    async->count--;
+
     return async;
 }
 
